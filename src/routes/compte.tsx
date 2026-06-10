@@ -1,9 +1,8 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/supabase/client";
+import { api, Commande, Mesure, formatPrice } from "@/lib/api";
 import { toast } from "sonner";
-import { formatPrice } from "@/hooks/use-cart";
 import logo from "@/assets/modolk-logo.png";
 
 export const Route = createFileRoute("/compte")({
@@ -11,14 +10,32 @@ export const Route = createFileRoute("/compte")({
   head: () => ({ meta: [{ title: "Mon compte — MODOLK" }] }),
 });
 
-interface Order { id: string; status: string; total_cents: number; created_at: string; shipping_address: string | null; }
+const STATUT_LABEL: Record<string, string> = {
+  EnAttente: "En attente",
+  Payer: "Payée",
+  EnProduction: "En production",
+  Pret: "Prête",
+  Livre: "Livrée",
+};
+
+const MESURE_EMPTY = {
+  label: "", poitrine: 0, poids: 0, epaule: 0,
+  longueurBras: 0, longueurJambe: 0, cou: 0,
+  hanche: 0, poignet: 0, ventre: 0,
+};
 
 function ComptePage() {
   const { user, isAdmin, loading, signOut } = useAuth();
   const navigate = useNavigate();
-  const [profile, setProfile] = useState({ full_name: "", phone: "", address: "" });
+
+  const [profile, setProfile] = useState({ nom: "", prenom: "", telephone: "", adresse: "" });
   const [saving, setSaving] = useState(false);
-  const [orders, setOrders] = useState<Order[]>([]);
+  const [commandes, setCommandes] = useState<Commande[]>([]);
+  const [mesures, setMesures] = useState<Mesure[]>([]);
+  const [newMesure, setNewMesure] = useState(MESURE_EMPTY);
+  const [savingMesure, setSavingMesure] = useState(false);
+  const [showMesureForm, setShowMesureForm] = useState(false);
+  const [tab, setTab] = useState<"profil" | "commandes" | "mesures">("profil");
 
   useEffect(() => {
     if (!loading && !user) navigate({ to: "/auth" });
@@ -26,27 +43,65 @@ function ComptePage() {
 
   useEffect(() => {
     if (!user) return;
-    supabase.from("profiles").select("full_name, phone, address").eq("id", user.id).maybeSingle()
-      .then(({ data }) => {
-        if (data) setProfile({
-          full_name: data.full_name ?? "",
-          phone: data.phone ?? "",
-          address: data.address ?? "",
-        });
-      });
-    supabase.from("orders").select("id, status, total_cents, created_at, shipping_address")
-      .eq("user_id", user.id).order("created_at", { ascending: false })
-      .then(({ data }) => setOrders(data ?? []));
+    setProfile({
+      nom: user.nom ?? "",
+      prenom: user.prenom ?? "",
+      telephone: user.telephone ?? "",
+      adresse: user.adresse ?? "",
+    });
+    api.commande.findUserCommandes(user.id)
+      .then((c) => setCommandes(c))
+      .catch(() => {});
+    api.mesure.findAll(user.id)
+      .then((m) => setMesures(m))
+      .catch(() => {});
   }, [user]);
 
-  async function save(e: React.FormEvent) {
+  async function saveProfile(e: React.FormEvent) {
     e.preventDefault();
     if (!user) return;
     setSaving(true);
-    const { error } = await supabase.from("profiles").update(profile).eq("id", user.id);
-    setSaving(false);
-    if (error) toast.error(error.message);
-    else toast.success("Profil mis à jour.");
+    try {
+      await api.users.update(user.id, {
+        nom: profile.nom,
+        prenom: profile.prenom,
+        telephone: profile.telephone,
+        adresse: profile.adresse || undefined,
+      });
+      toast.success("Profil mis à jour.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function createMesure() {
+    if (!user || !newMesure.label) return;
+    setSavingMesure(true);
+    try {
+      const created = await api.mesure.create(user.id, newMesure);
+      setMesures((prev) => [...prev, created]);
+      setNewMesure(MESURE_EMPTY);
+      setShowMesureForm(false);
+      toast.success("Mesures ajoutées.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingMesure(false);
+    }
+  }
+
+  async function deleteMesure(mesureId: number) {
+    if (!user) return;
+    if (!confirm("Supprimer cette mesure ?")) return;
+    try {
+      await api.mesure.remove(mesureId, user.id);
+      setMesures((prev) => prev.filter((m) => m.id !== mesureId));
+      toast.success("Mesure supprimée.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    }
   }
 
   if (loading || !user) {
@@ -67,7 +122,10 @@ function ComptePage() {
               Espace admin
             </Link>
           )}
-          <button onClick={() => { signOut(); navigate({ to: "/" }); }} className="text-muted-foreground hover:text-foreground">
+          <button
+            onClick={() => { signOut(); navigate({ to: "/" }); }}
+            className="text-muted-foreground hover:text-foreground"
+          >
             Déconnexion
           </button>
         </div>
@@ -75,66 +133,185 @@ function ComptePage() {
 
       <main className="mx-auto max-w-3xl px-6 py-12">
         <div className="text-xs tracking-[0.3em] text-accent">MON COMPTE</div>
-        <h1 className="mt-3 text-4xl font-light">Bienvenue{profile.full_name ? `, ${profile.full_name.split(" ")[0]}` : ""}.</h1>
+        <h1 className="mt-3 text-4xl font-light">
+          Bienvenue{user.prenom ? `, ${user.prenom}` : ""}.
+        </h1>
         <p className="mt-2 text-muted-foreground text-sm">{user.email}</p>
 
-        <form onSubmit={save} className="mt-10 space-y-5 rounded-2xl border border-border bg-card p-8">
-          <h2 className="text-lg font-light">Mes informations</h2>
-          <div>
-            <label className="text-xs tracking-wide text-muted-foreground">Nom complet</label>
-            <input
-              value={profile.full_name}
-              onChange={(e) => setProfile({ ...profile, full_name: e.target.value })}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-            />
-          </div>
-          <div>
-            <label className="text-xs tracking-wide text-muted-foreground">Téléphone</label>
-            <input
-              value={profile.phone}
-              onChange={(e) => setProfile({ ...profile, phone: e.target.value })}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-            />
-          </div>
-          <div>
-            <label className="text-xs tracking-wide text-muted-foreground">Adresse de livraison</label>
-            <textarea
-              rows={3}
-              value={profile.address}
-              onChange={(e) => setProfile({ ...profile, address: e.target.value })}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-            />
-          </div>
-          <button
-            disabled={saving}
-            className="rounded-full px-6 py-2.5 text-sm font-medium text-accent-foreground shadow-[var(--shadow-gold)] disabled:opacity-60"
-            style={{ background: "var(--gradient-gold)" }}
-          >
-            {saving ? "..." : "Enregistrer"}
-          </button>
-        </form>
+        {/* Tabs */}
+        <div className="mt-8 flex gap-1 border-b border-border">
+          {(["profil", "commandes", "mesures"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => setTab(t)}
+              className={`px-4 py-2 text-sm capitalize transition ${
+                tab === t ? "border-b-2 border-accent text-foreground" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {t === "mesures" ? "Mes mesures" : t === "commandes" ? "Mes commandes" : "Profil"}
+            </button>
+          ))}
+        </div>
 
-        <section className="mt-10 rounded-2xl border border-border bg-card p-8">
-          <h2 className="text-lg font-light">Mes commandes</h2>
-          {orders.length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">Aucune commande pour le moment.</p>
-          ) : (
-            <ul className="mt-6 divide-y divide-border">
-              {orders.map((o) => (
-                <li key={o.id} className="flex items-center justify-between gap-4 py-3 text-sm">
-                  <div>
-                    <div>{new Date(o.created_at).toLocaleDateString("fr-FR")}</div>
-                    <div className="text-xs text-muted-foreground">{o.shipping_address || "—"}</div>
-                  </div>
-                  <div className="text-right">
-                    <div>{formatPrice(o.total_cents)}</div>
-                    <div className="text-xs uppercase tracking-wider text-accent">{o.status}</div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
+        {/* Tab: Profil */}
+        {tab === "profil" && (
+          <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl border border-border bg-card p-8">
+            <h2 className="text-lg font-light">Mes informations</h2>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs tracking-wide text-muted-foreground">Nom</label>
+                <input
+                  value={profile.nom}
+                  onChange={(e) => setProfile({ ...profile, nom: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                />
+              </div>
+              <div>
+                <label className="text-xs tracking-wide text-muted-foreground">Prénom</label>
+                <input
+                  value={profile.prenom}
+                  onChange={(e) => setProfile({ ...profile, prenom: e.target.value })}
+                  className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs tracking-wide text-muted-foreground">Téléphone</label>
+              <input
+                value={profile.telephone}
+                onChange={(e) => setProfile({ ...profile, telephone: e.target.value })}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+              />
+            </div>
+            <div>
+              <label className="text-xs tracking-wide text-muted-foreground">Adresse de livraison</label>
+              <textarea
+                rows={3}
+                value={profile.adresse}
+                onChange={(e) => setProfile({ ...profile, adresse: e.target.value })}
+                className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+              />
+            </div>
+            <button
+              disabled={saving}
+              className="rounded-full px-6 py-2.5 text-sm font-medium text-accent-foreground shadow-[var(--shadow-gold)] disabled:opacity-60"
+              style={{ background: "var(--gradient-gold)" }}
+            >
+              {saving ? "..." : "Enregistrer"}
+            </button>
+          </form>
+        )}
+
+        {/* Tab: Commandes */}
+        {tab === "commandes" && (
+          <section className="mt-8 rounded-2xl border border-border bg-card p-8">
+            <h2 className="text-lg font-light">Mes commandes</h2>
+            {commandes.length === 0 ? (
+              <p className="mt-4 text-sm text-muted-foreground">Aucune commande pour le moment.</p>
+            ) : (
+              <ul className="mt-6 divide-y divide-border">
+                {commandes.map((o) => (
+                  <li key={o.id} className="flex items-center justify-between gap-4 py-3 text-sm">
+                    <div>
+                      <div>Commande #{o.id}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {new Date(o.dateCommande).toLocaleDateString("fr-FR")} · {o.tenues.length} tenue(s)
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-medium">{formatPrice(o.totalPrice)}</div>
+                      <div className="text-xs uppercase tracking-wider text-accent">
+                        {STATUT_LABEL[o.statutCommande] ?? o.statutCommande}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
+
+        {/* Tab: Mesures */}
+        {tab === "mesures" && (
+          <section className="mt-8 space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-light">Mes mesures</h2>
+              <button
+                onClick={() => setShowMesureForm(!showMesureForm)}
+                className="text-xs text-accent hover:underline"
+              >
+                {showMesureForm ? "Annuler" : "Ajouter une mesure"}
+              </button>
+            </div>
+
+            {showMesureForm && (
+              <div className="rounded-2xl border border-border bg-card p-6 space-y-4">
+                <h3 className="text-sm font-medium">Nouvelle mesure</h3>
+                <input
+                  required
+                  placeholder="Nom (ex: Tenue mariage)"
+                  value={newMesure.label}
+                  onChange={(e) => setNewMesure({ ...newMesure, label: e.target.value })}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+                <p className="text-xs text-muted-foreground">Toutes les valeurs en centimètres, sauf le poids (kg).</p>
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                  {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
+                    <div key={k}>
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        min={0}
+                        value={newMesure[k] || ""}
+                        onChange={(e) => setNewMesure({ ...newMesure, [k]: parseFloat(e.target.value) || 0 })}
+                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                      />
+                    </div>
+                  ))}
+                </div>
+                <button
+                  disabled={savingMesure || !newMesure.label}
+                  onClick={createMesure}
+                  className="rounded-full px-5 py-2 text-xs text-accent-foreground disabled:opacity-50"
+                  style={{ background: "var(--gradient-gold)" }}
+                >
+                  {savingMesure ? "..." : "Enregistrer"}
+                </button>
+              </div>
+            )}
+
+            {mesures.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Aucune mesure enregistrée. Ajoutez vos mesures pour pouvoir commander sur mesure.
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {mesures.map((m) => (
+                  <li key={m.id} className="rounded-2xl border border-border bg-card p-5">
+                    <div className="flex items-start justify-between">
+                      <h3 className="font-medium">{m.label}</h3>
+                      <button
+                        onClick={() => deleteMesure(m.id)}
+                        className="text-xs text-destructive hover:underline"
+                      >
+                        Supprimer
+                      </button>
+                    </div>
+                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground md:grid-cols-5">
+                      {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
+                        <div key={k}>
+                          <span className="uppercase tracking-wider">{k}</span>
+                          <div className="mt-0.5 text-foreground">{m[k]} {k === "poids" ? "kg" : "cm"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+        )}
       </main>
     </div>
   );

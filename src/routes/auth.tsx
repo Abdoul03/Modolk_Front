@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { useState } from "react";
+import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import { COUNTRIES, DEFAULT_COUNTRY } from "@/lib/countries";
 
@@ -13,19 +13,27 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const { login, register, user, loading } = useAuth();
   const [mode, setMode] = useState<"signin" | "signup">("signin");
+
+  // Champs communs
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
+
+  // Champs inscription
+  const [nom, setNom] = useState("");
+  const [prenom, setPrenom] = useState("");
   const [countryCode, setCountryCode] = useState(DEFAULT_COUNTRY.code);
   const [phoneLocal, setPhoneLocal] = useState("");
+  const [adresse, setAdresse] = useState("");
+
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) navigate({ to: "/compte" });
-    });
-  }, [navigate]);
+  // Redirection si déjà connecté
+  if (!loading && user) {
+    navigate({ to: "/compte" });
+    return null;
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -34,50 +42,26 @@ function AuthPage() {
       if (mode === "signup") {
         const country = COUNTRIES.find((c) => c.code === countryCode) ?? DEFAULT_COUNTRY;
         const cleaned = phoneLocal.replace(/\D/g, "");
-        const fullPhone = cleaned ? `${country.dial} ${cleaned}` : "";
+        const telephone = cleaned ? `${country.dial}${cleaned}` : "";
 
-        const { data, error } = await supabase.auth.signUp({
+        await register({
+          nom: nom.trim(),
+          prenom: prenom.trim(),
           email: email.trim().toLowerCase(),
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/compte`,
-            data: { full_name: fullName },
-          },
+          telephone,
+          motDePasse: password,
+          adresse: adresse.trim() || undefined,
         });
-        if (error) throw error;
-
-        // Auto-confirm activé : la session est immédiate. Sinon on tente une connexion.
-        if (!data.session) {
-          const { error: signInErr } = await supabase.auth.signInWithPassword({
-            email: email.trim().toLowerCase(),
-            password,
-          });
-          if (signInErr) throw signInErr;
-        }
-
-        // Sauvegarde téléphone + pays dans le profil
-        const uid = (await supabase.auth.getUser()).data.user?.id;
-        if (uid && fullPhone) {
-          await supabase.from("profiles").update({ phone: fullPhone }).eq("id", uid);
-        }
-
         toast.success("Compte créé. Bienvenue !");
-        navigate({ to: "/compte" });
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim().toLowerCase(),
-          password,
-        });
-        if (error) throw error;
+        await login(email.trim().toLowerCase(), password);
         toast.success("Bienvenue.");
-        navigate({ to: "/compte" });
       }
+      navigate({ to: "/compte" });
     } catch (err) {
-      const msg = (err as Error).message;
-      if (msg.toLowerCase().includes("invalid login")) {
+      const msg = (err as Error).message ?? "Une erreur est survenue.";
+      if (msg.toLowerCase().includes("email") || msg.toLowerCase().includes("mot de passe")) {
         toast.error("E-mail ou mot de passe incorrect.");
-      } else if (msg.toLowerCase().includes("already registered") || msg.toLowerCase().includes("user already")) {
-        toast.error("Un compte existe déjà avec cet e-mail. Connecte-toi.");
       } else {
         toast.error(msg);
       }
@@ -103,14 +87,25 @@ function AuthPage() {
           <form onSubmit={submit} className="mt-6 space-y-4">
             {mode === "signup" && (
               <>
-                <div>
-                  <label className="text-xs tracking-wide text-muted-foreground">Nom complet</label>
-                  <input
-                    required
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
-                  />
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs tracking-wide text-muted-foreground">Nom</label>
+                    <input
+                      required
+                      value={nom}
+                      onChange={(e) => setNom(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs tracking-wide text-muted-foreground">Prénom</label>
+                    <input
+                      required
+                      value={prenom}
+                      onChange={(e) => setPrenom(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className="text-xs tracking-wide text-muted-foreground">Téléphone</label>
@@ -130,14 +125,24 @@ function AuthPage() {
                       type="tel"
                       inputMode="numeric"
                       placeholder="Numéro"
+                      required
                       value={phoneLocal}
                       onChange={(e) => setPhoneLocal(e.target.value)}
                       className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
                     />
                   </div>
                 </div>
+                <div>
+                  <label className="text-xs tracking-wide text-muted-foreground">Adresse (optionnel)</label>
+                  <input
+                    value={adresse}
+                    onChange={(e) => setAdresse(e.target.value)}
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
+                  />
+                </div>
               </>
             )}
+
             <div>
               <label className="text-xs tracking-wide text-muted-foreground">E-mail</label>
               <input
@@ -159,6 +164,7 @@ function AuthPage() {
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-ring"
               />
             </div>
+
             <button
               type="submit"
               disabled={busy}

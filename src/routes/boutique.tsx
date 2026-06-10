@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { useCart, formatPrice } from "@/hooks/use-cart";
+import { api, Design, Mesure, formatPrice } from "@/lib/api";
+import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
 import logo from "@/assets/modolk-logo.png";
@@ -14,17 +14,13 @@ export const Route = createFileRoute("/boutique")({
   head: () => ({ meta: [{ title: "Boutique — MODOLK" }] }),
 });
 
-type Category = "tous" | "femme" | "homme" | "enfant" | "accessoires";
+type Category = "tous" | "femme" | "homme" | "enfant";
 
-interface Product {
-  id: string;
-  name: string;
-  description: string | null;
-  price_cents: number;
-  category: string;
-  image_url: string | null;
-  stock: number;
-}
+const categoryMap: Record<string, string> = {
+  Femme: "femme",
+  Homme: "homme",
+  Enfant: "enfant",
+};
 
 const fallback: Record<string, string> = {
   femme: femmeImg,
@@ -32,61 +28,106 @@ const fallback: Record<string, string> = {
   enfant: enfantImg,
 };
 
+const MESURE_EMPTY = {
+  label: "", poitrine: 0, poids: 0, epaule: 0,
+  longueurBras: 0, longueurJambe: 0, cou: 0,
+  hanche: 0, poignet: 0, ventre: 0,
+};
+
 function BoutiquePage() {
-  const [products, setProducts] = useState<Product[]>([]);
+  const [designs, setDesigns] = useState<Design[]>([]);
   const [cat, setCat] = useState<Category>("tous");
   const [loading, setLoading] = useState(true);
   const cart = useCart();
   const { user } = useAuth();
   const navigate = useNavigate();
+
+  // Checkout state
   const [checkingOut, setCheckingOut] = useState(false);
-  const [shipping, setShipping] = useState({ address: "", phone: "", notes: "" });
+  const [mesures, setMesures] = useState<Mesure[]>([]);
+  const [selectedMesureId, setSelectedMesureId] = useState<number | null>(null);
+  const [showMesureForm, setShowMesureForm] = useState(false);
+  const [newMesure, setNewMesure] = useState(MESURE_EMPTY);
+  const [savingMesure, setSavingMesure] = useState(false);
 
   useEffect(() => {
-    supabase.from("products").select("id, name, description, price_cents, category, image_url, stock")
-      .eq("active", true)
-      .order("featured", { ascending: false })
-      .then(({ data }) => {
-        setProducts(data ?? []);
-        setLoading(false);
-      });
+    api.design.findAll()
+      .then((data) => setDesigns(data))
+      .catch(() => toast.error("Impossible de charger les modèles."))
+      .finally(() => setLoading(false));
   }, []);
 
-  const filtered = useMemo(
-    () => (cat === "tous" ? products : products.filter((p) => p.category === cat)),
-    [cat, products],
-  );
+  useEffect(() => {
+    if (!user) return;
+    api.mesure.findAll(user.id).then((m) => {
+      setMesures(m);
+      if (m.length > 0) setSelectedMesureId(m[0].id);
+    }).catch(() => {});
+  }, [user]);
+
+  const filtered = useMemo(() => {
+    if (cat === "tous") return designs;
+    return designs.filter((d) => (categoryMap[d.categorie?.nom ?? ""] ?? "").toLowerCase() === cat);
+  }, [cat, designs]);
+
+  function getImageUrl(d: Design): string {
+    if (d.medias.length > 0) {
+      const url = d.medias[0].imageUrl;
+      if (url.startsWith("/uploads/")) {
+        return `${(import.meta.env.VITE_API_URL as string ?? "http://localhost:3000/api/v1").replace("/api/v1", "")}${url}`;
+      }
+      return url;
+    }
+    const catKey = (categoryMap[d.categorie?.nom ?? ""] ?? "femme") as keyof typeof fallback;
+    return fallback[catKey] ?? femmeImg;
+  }
+
+  async function saveMesure() {
+    if (!user) return;
+    setSavingMesure(true);
+    try {
+      const created = await api.mesure.create(user.id, newMesure);
+      setMesures((prev) => [...prev, created]);
+      setSelectedMesureId(created.id);
+      setShowMesureForm(false);
+      setNewMesure(MESURE_EMPTY);
+      toast.success("Mesures enregistrées.");
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setSavingMesure(false);
+    }
+  }
 
   async function checkout(e: React.FormEvent) {
     e.preventDefault();
     if (!user) { navigate({ to: "/auth" }); return; }
     if (cart.items.length === 0) return;
+    if (!selectedMesureId) { toast.error("Veuillez sélectionner ou créer vos mesures."); return; }
+
     setCheckingOut(true);
-    const { data: order, error } = await supabase.from("orders").insert({
-      user_id: user.id,
-      total_cents: cart.total,
-      shipping_address: shipping.address,
-      phone: shipping.phone,
-      notes: shipping.notes,
-    }).select("id").single();
-    if (error || !order) { toast.error(error?.message ?? "Erreur"); setCheckingOut(false); return; }
-    const { error: itemsErr } = await supabase.from("order_items").insert(
-      cart.items.map((i) => ({
-        order_id: order.id,
-        product_id: i.id,
-        product_name: i.name,
-        unit_price_cents: i.price_cents,
-        quantity: i.quantity,
-      })),
-    );
-    setCheckingOut(false);
-    if (itemsErr) { toast.error(itemsErr.message); return; }
-    cart.clear();
-    toast.success("Commande passée avec succès.");
-    navigate({ to: "/compte" });
+    try {
+      await api.commande.create({
+        utilisateurId: user.id,
+        tenues: cart.items.map((i) => ({
+          modelId: i.designId,
+          tissusId: i.tissusId,
+          mesureId: selectedMesureId,
+          quantite: i.quantity,
+          optionIds: [],
+        })),
+      });
+      cart.clear();
+      toast.success("Commande passée avec succès !");
+      navigate({ to: "/compte" });
+    } catch (err) {
+      toast.error((err as Error).message);
+    } finally {
+      setCheckingOut(false);
+    }
   }
 
-  const cats: Category[] = ["tous", "femme", "homme", "enfant", "accessoires"];
+  const cats: Category[] = ["tous", "femme", "homme", "enfant"];
 
   return (
     <div className="min-h-screen bg-background">
@@ -107,15 +148,14 @@ function BoutiquePage() {
         <div className="text-xs tracking-[0.3em] text-accent">BOUTIQUE</div>
         <h1 className="mt-3 text-4xl font-light md:text-5xl">Notre collection</h1>
 
+        {/* Filtres catégories */}
         <div className="mt-8 flex flex-wrap gap-2">
           {cats.map((c) => (
             <button
               key={c}
               onClick={() => setCat(c)}
               className={`rounded-full border px-4 py-1.5 text-xs uppercase tracking-wider transition ${
-                cat === c
-                  ? "border-accent bg-accent text-accent-foreground"
-                  : "border-border text-muted-foreground hover:text-foreground"
+                cat === c ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground hover:text-foreground"
               }`}
             >
               {c}
@@ -123,38 +163,56 @@ function BoutiquePage() {
           ))}
         </div>
 
+        {/* Grille des designs */}
         <div className="mt-10 grid gap-6 md:grid-cols-3">
           {loading ? (
             <p className="text-muted-foreground">Chargement…</p>
           ) : filtered.length === 0 ? (
-            <p className="text-muted-foreground">Aucun produit pour cette catégorie.</p>
+            <p className="text-muted-foreground">Aucun modèle pour cette catégorie.</p>
           ) : (
-            filtered.map((p) => (
-              <article key={p.id} className="overflow-hidden rounded-2xl border border-border bg-card">
+            filtered.map((d) => (
+              <article key={d.id} className="overflow-hidden rounded-2xl border border-border bg-card">
                 <div className="aspect-[4/5] overflow-hidden bg-secondary">
                   <img
-                    src={p.image_url || fallback[p.category] || femmeImg}
-                    alt={p.name}
+                    src={getImageUrl(d)}
+                    alt={d.nom}
                     loading="lazy"
                     className="h-full w-full object-cover"
                   />
                 </div>
                 <div className="p-5">
-                  <div className="text-[10px] uppercase tracking-[0.25em] text-accent">{p.category}</div>
-                  <h3 className="mt-1 text-lg font-light">{p.name}</h3>
-                  {p.description && <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{p.description}</p>}
+                  <div className="text-[10px] uppercase tracking-[0.25em] text-accent">
+                    {d.categorie?.nom ?? "—"} · {d.tissus?.type}
+                  </div>
+                  <h3 className="mt-1 text-lg font-light">{d.nom}</h3>
+                  {d.description && (
+                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">{d.description}</p>
+                  )}
+                  <div className="mt-1 text-xs text-muted-foreground">
+                    Tissu : {d.tissus?.couleur} · {d.tissus?.texture}
+                  </div>
+                  {d.options.length > 0 && (
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      Options : {d.options.map((o) => o.nom).join(", ")}
+                    </div>
+                  )}
                   <div className="mt-4 flex items-center justify-between">
-                    <span className="text-base">{formatPrice(p.price_cents)}</span>
+                    <span className="text-base font-medium">{formatPrice(d.prixBase)}</span>
                     <button
-                      disabled={p.stock <= 0}
                       onClick={() => {
-                        cart.add({ id: p.id, name: p.name, price_cents: p.price_cents, image_url: p.image_url });
-                        toast.success(`${p.name} ajouté au panier`);
+                        cart.add({
+                          designId: d.id,
+                          tissusId: d.tissusId,
+                          name: d.nom,
+                          price: d.prixBase,
+                          image_url: d.medias[0]?.imageUrl ?? null,
+                        });
+                        toast.success(`${d.nom} ajouté au panier`);
                       }}
-                      className="rounded-full px-4 py-1.5 text-xs font-medium text-accent-foreground disabled:opacity-50"
+                      className="rounded-full px-4 py-1.5 text-xs font-medium text-accent-foreground"
                       style={{ background: "var(--gradient-gold)" }}
                     >
-                      {p.stock <= 0 ? "Rupture" : "Ajouter"}
+                      Ajouter
                     </button>
                   </div>
                 </div>
@@ -163,7 +221,7 @@ function BoutiquePage() {
           )}
         </div>
 
-        {/* Cart */}
+        {/* Panier & checkout */}
         <section className="mt-20 rounded-2xl border border-border bg-card p-8">
           <h2 className="text-2xl font-light">Mon panier</h2>
           {cart.items.length === 0 ? (
@@ -172,21 +230,21 @@ function BoutiquePage() {
             <>
               <ul className="mt-6 divide-y divide-border">
                 {cart.items.map((i) => (
-                  <li key={i.id} className="flex items-center justify-between gap-4 py-4">
+                  <li key={i.designId} className="flex items-center justify-between gap-4 py-4">
                     <div>
                       <div className="text-sm">{i.name}</div>
-                      <div className="text-xs text-muted-foreground">{formatPrice(i.price_cents)}</div>
+                      <div className="text-xs text-muted-foreground">{formatPrice(i.price)}</div>
                     </div>
                     <div className="flex items-center gap-3">
                       <input
                         type="number"
                         min={1}
                         value={i.quantity}
-                        onChange={(e) => cart.setQty(i.id, Number(e.target.value))}
+                        onChange={(e) => cart.setQty(i.designId, Number(e.target.value))}
                         className="w-16 rounded-md border border-input bg-background px-2 py-1 text-sm"
                       />
-                      <span className="w-20 text-right text-sm">{formatPrice(i.price_cents * i.quantity)}</span>
-                      <button onClick={() => cart.remove(i.id)} className="text-xs text-muted-foreground hover:text-foreground">
+                      <span className="w-28 text-right text-sm">{formatPrice(i.price * i.quantity)}</span>
+                      <button onClick={() => cart.remove(i.designId)} className="text-xs text-muted-foreground hover:text-foreground">
                         Retirer
                       </button>
                     </div>
@@ -194,38 +252,96 @@ function BoutiquePage() {
                 ))}
               </ul>
               <div className="mt-6 flex items-center justify-between border-t border-border pt-4">
-                <span className="text-sm text-muted-foreground">Total</span>
+                <span className="text-sm text-muted-foreground">Total estimé</span>
                 <span className="text-xl">{formatPrice(cart.total)}</span>
               </div>
 
-              <form onSubmit={checkout} className="mt-8 grid gap-4 md:grid-cols-2">
-                <input
-                  required
-                  placeholder="Adresse de livraison"
-                  value={shipping.address}
-                  onChange={(e) => setShipping({ ...shipping, address: e.target.value })}
-                  className="md:col-span-2 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-                <input
-                  required
-                  placeholder="Téléphone"
-                  value={shipping.phone}
-                  onChange={(e) => setShipping({ ...shipping, phone: e.target.value })}
-                  className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-                <input
-                  placeholder="Notes (optionnel)"
-                  value={shipping.notes}
-                  onChange={(e) => setShipping({ ...shipping, notes: e.target.value })}
-                  className="rounded-md border border-input bg-background px-3 py-2 text-sm"
-                />
-                <button
-                  disabled={checkingOut}
-                  className="md:col-span-2 rounded-full px-6 py-3 text-sm font-medium text-accent-foreground disabled:opacity-60"
-                  style={{ background: "var(--gradient-gold)" }}
-                >
-                  {checkingOut ? "..." : user ? "Valider la commande" : "Se connecter pour commander"}
-                </button>
+              {/* Checkout */}
+              <form onSubmit={checkout} className="mt-8 space-y-5">
+                {user ? (
+                  <>
+                    {/* Sélection mesure */}
+                    <div>
+                      <div className="flex items-center justify-between">
+                        <label className="text-sm font-light">Mesures pour la commande</label>
+                        <button
+                          type="button"
+                          onClick={() => setShowMesureForm(!showMesureForm)}
+                          className="text-xs text-accent hover:underline"
+                        >
+                          {showMesureForm ? "Annuler" : mesures.length === 0 ? "Créer mes mesures" : "Nouvelle mesure"}
+                        </button>
+                      </div>
+
+                      {mesures.length > 0 && !showMesureForm && (
+                        <select
+                          value={selectedMesureId ?? ""}
+                          onChange={(e) => setSelectedMesureId(Number(e.target.value))}
+                          className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        >
+                          {mesures.map((m) => (
+                            <option key={m.id} value={m.id}>{m.label}</option>
+                          ))}
+                        </select>
+                      )}
+
+                      {(showMesureForm || mesures.length === 0) && (
+                        <div className="mt-3 rounded-xl border border-border bg-background p-4 space-y-3">
+                          <p className="text-xs text-muted-foreground">Entrez vos mesures en centimètres (sauf poids en kg).</p>
+                          <input
+                            required
+                            placeholder="Nom de la mesure (ex: Tenue mariage)"
+                            value={newMesure.label}
+                            onChange={(e) => setNewMesure({ ...newMesure, label: e.target.value })}
+                            className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+                          />
+                          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                            {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
+                              <div key={k}>
+                                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</label>
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  min={0}
+                                  value={newMesure[k] || ""}
+                                  onChange={(e) => setNewMesure({ ...newMesure, [k]: parseFloat(e.target.value) || 0 })}
+                                  className="mt-1 w-full rounded-md border border-input bg-card px-2 py-1.5 text-sm"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            disabled={savingMesure || !newMesure.label}
+                            onClick={saveMesure}
+                            className="rounded-full px-5 py-2 text-xs text-accent-foreground disabled:opacity-50"
+                            style={{ background: "var(--gradient-gold)" }}
+                          >
+                            {savingMesure ? "..." : "Enregistrer les mesures"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={checkingOut || !selectedMesureId}
+                      className="w-full rounded-full px-6 py-3 text-sm font-medium text-accent-foreground shadow-[var(--shadow-gold)] disabled:opacity-60"
+                      style={{ background: "var(--gradient-gold)" }}
+                    >
+                      {checkingOut ? "..." : "Valider la commande"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate({ to: "/auth" })}
+                    className="w-full rounded-full px-6 py-3 text-sm font-medium text-accent-foreground"
+                    style={{ background: "var(--gradient-gold)" }}
+                  >
+                    Se connecter pour commander
+                  </button>
+                )}
               </form>
             </>
           )}

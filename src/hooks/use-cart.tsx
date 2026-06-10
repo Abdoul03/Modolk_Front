@@ -1,9 +1,12 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
 export interface CartItem {
-  id: string;
+  designId: number;
+  tissusId: number;
   name: string;
-  price_cents: number;
+  price: number;
   image_url: string | null;
   quantity: number;
 }
@@ -11,15 +14,17 @@ export interface CartItem {
 interface CartCtx {
   items: CartItem[];
   add: (i: Omit<CartItem, "quantity">) => void;
-  remove: (id: string) => void;
-  setQty: (id: string, q: number) => void;
+  remove: (designId: number) => void;
+  setQty: (designId: number, q: number) => void;
   clear: () => void;
   total: number;
   count: number;
 }
 
+// ─── Context ──────────────────────────────────────────────────────────────────
+
 const Ctx = createContext<CartCtx | null>(null);
-const KEY = "modolk_cart_v1";
+const KEY = "modolk_cart_v2";
 
 export function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>([]);
@@ -27,8 +32,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const raw = typeof window !== "undefined" ? localStorage.getItem(KEY) : null;
-      if (raw) setItems(JSON.parse(raw));
-    } catch {}
+      if (raw) setItems(JSON.parse(raw) as CartItem[]);
+    } catch { /* ignore corrupted storage */ }
   }, []);
 
   useEffect(() => {
@@ -39,17 +44,17 @@ export function CartProvider({ children }: { children: ReactNode }) {
     items,
     add: (i) =>
       setItems((cur) => {
-        const ex = cur.find((c) => c.id === i.id);
-        if (ex) return cur.map((c) => (c.id === i.id ? { ...c, quantity: c.quantity + 1 } : c));
+        const ex = cur.find((c) => c.designId === i.designId && c.tissusId === i.tissusId);
+        if (ex) return cur.map((c) => c.designId === i.designId && c.tissusId === i.tissusId ? { ...c, quantity: c.quantity + 1 } : c);
         return [...cur, { ...i, quantity: 1 }];
       }),
-    remove: (id) => setItems((cur) => cur.filter((c) => c.id !== id)),
-    setQty: (id, q) =>
+    remove: (designId) => setItems((cur) => cur.filter((c) => c.designId !== designId)),
+    setQty: (designId, q) =>
       setItems((cur) =>
-        q <= 0 ? cur.filter((c) => c.id !== id) : cur.map((c) => (c.id === id ? { ...c, quantity: q } : c)),
+        q <= 0 ? cur.filter((c) => c.designId !== designId) : cur.map((c) => (c.designId === designId ? { ...c, quantity: q } : c)),
       ),
     clear: () => setItems([]),
-    total: items.reduce((s, i) => s + i.price_cents * i.quantity, 0),
+    total: items.reduce((s, i) => s + i.price * i.quantity, 0),
     count: items.reduce((s, i) => s + i.quantity, 0),
   };
 
@@ -61,6 +66,3 @@ export function useCart() {
   if (!c) throw new Error("useCart must be used within CartProvider");
   return c;
 }
-
-export const formatPrice = (cents: number) =>
-  (cents / 100).toLocaleString("fr-FR", { style: "currency", currency: "EUR" });

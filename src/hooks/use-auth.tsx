@@ -1,51 +1,83 @@
-import { useEffect, useState } from "react";
-import type { Session, User } from "@supabase/supabase-js";
-import { supabase } from "@/integrations/supabase/client";
+import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { api, BackendUser, clearTokens, getTokens, setTokens } from "@/lib/api";
 
-export type AppRole = "admin" | "client";
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-export function useAuth() {
-  const [session, setSession] = useState<Session | null>(null);
-  const [user, setUser] = useState<User | null>(null);
-  const [roles, setRoles] = useState<AppRole[]>([]);
+export interface RegisterData {
+  nom: string;
+  prenom: string;
+  email: string;
+  telephone: string;
+  motDePasse: string;
+  adresse?: string;
+}
+
+interface AuthCtx {
+  user: BackendUser | null;
+  loading: boolean;
+  isAdmin: boolean;
+  isClient: boolean;
+  login: (email: string, password: string) => Promise<void>;
+  register: (data: RegisterData) => Promise<void>;
+  signOut: () => void;
+}
+
+// ─── Context ──────────────────────────────────────────────────────────────────
+
+const Ctx = createContext<AuthCtx | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<BackendUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
-      setLoading(true);
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) {
-        // defer to avoid deadlock
-        setTimeout(() => fetchRoles(s.user.id).finally(() => setLoading(false)), 0);
-      } else {
-        setRoles([]);
-        setLoading(false);
-      }
-    });
-
-    supabase.auth.getSession().then(async ({ data: { session: s } }) => {
-      setSession(s);
-      setUser(s?.user ?? null);
-      if (s?.user) await fetchRoles(s.user.id);
-      setLoading(false);
-    });
-
-    return () => sub.subscription.unsubscribe();
+    const tokens = getTokens();
+    if (!tokens) { setLoading(false); return; }
+    api.auth
+      .profile()
+      .then(({ user: u }) => setUser(u))
+      .catch(() => clearTokens())
+      .finally(() => setLoading(false));
   }, []);
 
-  async function fetchRoles(uid: string) {
-    const { data } = await supabase.from("user_roles").select("role").eq("user_id", uid);
-    setRoles((data ?? []).map((r) => r.role as AppRole));
-  }
-
-  return {
-    session,
-    user,
-    roles,
-    isAdmin: roles.includes("admin"),
-    isClient: roles.includes("client"),
-    loading,
-    signOut: () => supabase.auth.signOut(),
+  const login = async (email: string, password: string) => {
+    const { user: u, tokens } = await api.auth.login({ email, password });
+    setTokens(tokens);
+    setUser(u);
   };
+
+  const register = async (data: RegisterData) => {
+    const { user: u, tokens } = await api.auth.register(data);
+    setTokens(tokens);
+    setUser(u);
+  };
+
+  const signOut = () => {
+    clearTokens();
+    setUser(null);
+  };
+
+  return (
+    <Ctx.Provider
+      value={{
+        user,
+        loading,
+        isAdmin: user?.role === "ADMIN",
+        isClient: user?.role === "CLIENT",
+        login,
+        register,
+        signOut,
+      }}
+    >
+      {children}
+    </Ctx.Provider>
+  );
+}
+
+// ─── Hook ─────────────────────────────────────────────────────────────────────
+
+export function useAuth() {
+  const c = useContext(Ctx);
+  if (!c) throw new Error("useAuth must be used within AuthProvider");
+  return c;
 }
