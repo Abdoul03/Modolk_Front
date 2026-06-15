@@ -67,18 +67,22 @@ export interface Design {
   medias: Media[];
 }
 
+export type TailleStandard = "XS" | "S" | "M" | "L" | "XL" | "XXL" | "XXXL";
+export const TAILLES_STANDARD: TailleStandard[] = ["XS", "S", "M", "L", "XL", "XXL", "XXXL"];
+
 export interface Mesure {
   id: number;
   label: string;
-  poitrine: number;
-  poids: number;
-  epaule: number;
-  longueurBras: number;
-  longueurJambe: number;
-  cou: number;
-  hanche: number;
-  poignet: number;
-  ventre: number;
+  tailleStandard?: TailleStandard | null;
+  poitrine?: number | null;
+  poids?: number | null;
+  epaule?: number | null;
+  longueurBras?: number | null;
+  longueurJambe?: number | null;
+  cou?: number | null;
+  hanche?: number | null;
+  poignet?: number | null;
+  ventre?: number | null;
   utilisateurId: number;
 }
 
@@ -219,10 +223,20 @@ export const api = {
 
   categorie: {
     findAll: () => apiFetch<Categorie[]>("/categorie"),
+    findOne: (id: number) => apiFetch<Categorie>(`/categorie/${id}`),
+    create: (data: { nom: string; description?: string }) =>
+      apiFetch<Categorie>("/categorie", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: number, data: Partial<{ nom: string; description?: string }>) =>
+      apiFetch<Categorie>(`/categorie/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
+    remove: (id: number) => apiFetch<void>(`/categorie/${id}`, { method: "DELETE" }),
   },
 
   tissus: {
     findAll: () => apiFetch<Tissus[]>("/tissus"),
+    create: (data: FormData) => apiFetch<Tissus>("/tissus", { method: "POST", body: data }),
+    update: (id: number, data: FormData) =>
+      apiFetch<Tissus>(`/tissus/${id}`, { method: "PATCH", body: data }),
+    remove: (id: number) => apiFetch<void>(`/tissus/${id}`, { method: "DELETE" }),
   },
 
   mesure: {
@@ -231,6 +245,7 @@ export const api = {
       apiFetch<Mesure>(`/mesure/${userId}`, { method: "POST", body: JSON.stringify(data) }),
     update: (id: number, userId: number, data: Partial<Omit<Mesure, "id" | "utilisateurId">>) =>
       apiFetch<Mesure>(`/mesure/${id}/${userId}`, { method: "PATCH", body: JSON.stringify(data) }),
+    findOne: (id: number, userId: number) => apiFetch<Mesure>(`/mesure/${id}/${userId}`),
     remove: (id: number, userId: number) =>
       apiFetch<Mesure>(`/mesure/${id}/${userId}`, { method: "DELETE" }),
   },
@@ -249,6 +264,9 @@ export const api = {
 
     findUserCommandes: (userId: number) => apiFetch<Commande[]>(`/commande/user/${userId}`),
     findAll: () => apiFetch<Commande[]>("/commande"),
+    findOne: (id: number) => apiFetch<Commande>(`/commande/${id}`),
+    update: (id: number, data: object) =>
+      apiFetch<Commande>(`/commande/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
 
     updateStatut: (id: number, statutCommande: string) =>
       apiFetch<Commande>(`/commande/${id}/statut`, {
@@ -257,6 +275,51 @@ export const api = {
       }),
 
     remove: (id: number) => apiFetch<void>(`/commande/${id}`, { method: "DELETE" }),
+  },
+
+  custumOption: {
+    findByModel: (modelId: number) => apiFetch<OptionCustomisation[]>(`/custum-option/${modelId}`),
+    create: (data: { type: string; nom: string; prixAjout: number; modelId: number }) =>
+      apiFetch<OptionCustomisation>("/custum-option", {
+        method: "POST",
+        body: JSON.stringify(data),
+      }),
+    update: (id: number, data: Partial<{ type: string; nom: string; prixAjout: number }>) =>
+      apiFetch<OptionCustomisation>(`/custum-option/${id}`, {
+        method: "PATCH",
+        body: JSON.stringify(data),
+      }),
+    remove: (id: number) => apiFetch<void>(`/custum-option/${id}`, { method: "DELETE" }),
+  },
+
+  paiement: {
+    create: (data: { commandeId: number; modePaiement: string; montant: number }) =>
+      apiFetch<{
+        id: number;
+        modePaiement: string;
+        montant: number;
+        statutPaiement: string;
+        commandeId: number;
+      }>("/paiement", { method: "POST", body: JSON.stringify(data) }),
+    findAll: () =>
+      apiFetch<
+        {
+          id: number;
+          modePaiement: string;
+          montant: number;
+          statutPaiement: string;
+          commandeId: number;
+        }[]
+      >("/paiement"),
+    findOne: (id: number) =>
+      apiFetch<{
+        id: number;
+        modePaiement: string;
+        montant: number;
+        statutPaiement: string;
+        commandeId: number;
+      }>(`/paiement/${id}`),
+    remove: (id: number) => apiFetch<void>(`/paiement/${id}`, { method: "DELETE" }),
   },
 };
 

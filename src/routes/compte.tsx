@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/use-auth";
-import { api, Commande, Mesure, formatPrice } from "@/lib/api";
+import { api, Commande, Mesure, formatPrice, TailleStandard, TAILLES_STANDARD } from "@/lib/api";
 import { toast } from "sonner";
 import logo from "@/assets/modolk-logo.png";
 
@@ -19,7 +19,8 @@ const STATUT_LABEL: Record<string, string> = {
 };
 
 const MESURE_EMPTY = {
-  label: "", poitrine: 0, poids: 0, epaule: 0,
+  label: "", tailleStandard: "" as TailleStandard | "",
+  poitrine: 0, poids: 0, epaule: 0,
   longueurBras: 0, longueurJambe: 0, cou: 0,
   hanche: 0, poignet: 0, ventre: 0,
 };
@@ -35,6 +36,7 @@ function ComptePage() {
   const [newMesure, setNewMesure] = useState(MESURE_EMPTY);
   const [savingMesure, setSavingMesure] = useState(false);
   const [showMesureForm, setShowMesureForm] = useState(false);
+  const [mesureMode, setMesureMode] = useState<"standard" | "complete">("standard");
   const [tab, setTab] = useState<"profil" | "commandes" | "mesures">("profil");
 
   useEffect(() => {
@@ -80,7 +82,22 @@ function ComptePage() {
     if (!user || !newMesure.label) return;
     setSavingMesure(true);
     try {
-      const created = await api.mesure.create(user.id, newMesure);
+      const payload: Omit<Mesure, "id" | "utilisateurId"> = { label: newMesure.label };
+      if (mesureMode === "standard") {
+        if (!newMesure.tailleStandard) { toast.error("Sélectionnez une taille."); setSavingMesure(false); return; }
+        payload.tailleStandard = newMesure.tailleStandard;
+      } else {
+        payload.poitrine = newMesure.poitrine || undefined;
+        payload.poids = newMesure.poids || undefined;
+        payload.epaule = newMesure.epaule || undefined;
+        payload.longueurBras = newMesure.longueurBras || undefined;
+        payload.longueurJambe = newMesure.longueurJambe || undefined;
+        payload.cou = newMesure.cou || undefined;
+        payload.hanche = newMesure.hanche || undefined;
+        payload.poignet = newMesure.poignet || undefined;
+        payload.ventre = newMesure.ventre || undefined;
+      }
+      const created = await api.mesure.create(user.id, payload);
       setMesures((prev) => [...prev, created]);
       setNewMesure(MESURE_EMPTY);
       setShowMesureForm(false);
@@ -254,22 +271,55 @@ function ComptePage() {
                   onChange={(e) => setNewMesure({ ...newMesure, label: e.target.value })}
                   className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 />
-                <p className="text-xs text-muted-foreground">Toutes les valeurs en centimètres, sauf le poids (kg).</p>
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                  {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
-                    <div key={k}>
-                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</label>
-                      <input
-                        type="number"
-                        step="0.1"
-                        min={0}
-                        value={newMesure[k] || ""}
-                        onChange={(e) => setNewMesure({ ...newMesure, [k]: parseFloat(e.target.value) || 0 })}
-                        className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
-                      />
-                    </div>
-                  ))}
+                {/* Toggle mode */}
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setMesureMode("standard")}
+                    className={`flex-1 rounded-full border px-3 py-1.5 text-xs transition ${mesureMode === "standard" ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground"}`}
+                  >
+                    Taille standard
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMesureMode("complete")}
+                    className={`flex-1 rounded-full border px-3 py-1.5 text-xs transition ${mesureMode === "complete" ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground"}`}
+                  >
+                    Sur mesure
+                  </button>
                 </div>
+                {mesureMode === "standard" ? (
+                  <div>
+                    <label className="text-xs tracking-wide text-muted-foreground">Taille</label>
+                    <select
+                      value={newMesure.tailleStandard}
+                      onChange={(e) => setNewMesure({ ...newMesure, tailleStandard: e.target.value as TailleStandard })}
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    >
+                      <option value="">Choisir une taille…</option>
+                      {TAILLES_STANDARD.map((t) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-xs text-muted-foreground">Toutes les valeurs en centimètres, sauf le poids (kg).</p>
+                    <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                      {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
+                        <div key={k}>
+                          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</label>
+                          <input
+                            type="number"
+                            step="0.1"
+                            min={0}
+                            value={(newMesure[k] as number) || ""}
+                            onChange={(e) => setNewMesure({ ...newMesure, [k]: parseFloat(e.target.value) || 0 })}
+                            className="mt-1 w-full rounded-md border border-input bg-background px-2 py-1.5 text-sm"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
                 <button
                   disabled={savingMesure || !newMesure.label}
                   onClick={createMesure}
@@ -298,14 +348,23 @@ function ComptePage() {
                         Supprimer
                       </button>
                     </div>
-                    <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground md:grid-cols-5">
-                      {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
-                        <div key={k}>
-                          <span className="uppercase tracking-wider">{k}</span>
-                          <div className="mt-0.5 text-foreground">{m[k]} {k === "poids" ? "kg" : "cm"}</div>
-                        </div>
-                      ))}
-                    </div>
+                    {m.tailleStandard ? (
+                      <div className="mt-3 text-sm">
+                        <span className="text-xs uppercase tracking-wider text-muted-foreground">Taille standard : </span>
+                        <span className="font-medium text-foreground">{m.tailleStandard}</span>
+                      </div>
+                    ) : (
+                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground md:grid-cols-5">
+                        {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
+                          m[k] != null && (
+                            <div key={k}>
+                              <span className="uppercase tracking-wider">{k}</span>
+                              <div className="mt-0.5 text-foreground">{m[k]} {k === "poids" ? "kg" : "cm"}</div>
+                            </div>
+                          )
+                        ))}
+                      </div>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { api, Design, Mesure, formatPrice } from "@/lib/api";
+import { api, Design, Mesure, formatPrice, TailleStandard, TAILLES_STANDARD } from "@/lib/api";
 import { useCart } from "@/hooks/use-cart";
 import { useAuth } from "@/hooks/use-auth";
 import { toast } from "sonner";
@@ -29,7 +29,8 @@ const fallback: Record<string, string> = {
 };
 
 const MESURE_EMPTY = {
-  label: "", poitrine: 0, poids: 0, epaule: 0,
+  label: "", tailleStandard: "" as TailleStandard | "",
+  poitrine: 0, poids: 0, epaule: 0,
   longueurBras: 0, longueurJambe: 0, cou: 0,
   hanche: 0, poignet: 0, ventre: 0,
 };
@@ -49,6 +50,7 @@ function BoutiquePage() {
   const [showMesureForm, setShowMesureForm] = useState(false);
   const [newMesure, setNewMesure] = useState(MESURE_EMPTY);
   const [savingMesure, setSavingMesure] = useState(false);
+  const [mesureMode, setMesureMode] = useState<"standard" | "complete">("standard");
 
   useEffect(() => {
     api.design.findAll()
@@ -86,7 +88,22 @@ function BoutiquePage() {
     if (!user) return;
     setSavingMesure(true);
     try {
-      const created = await api.mesure.create(user.id, newMesure);
+      const payload: Omit<Mesure, "id" | "utilisateurId"> = { label: newMesure.label };
+      if (mesureMode === "standard") {
+        if (!newMesure.tailleStandard) { toast.error("Sélectionnez une taille."); setSavingMesure(false); return; }
+        payload.tailleStandard = newMesure.tailleStandard;
+      } else {
+        payload.poitrine = newMesure.poitrine || undefined;
+        payload.poids = newMesure.poids || undefined;
+        payload.epaule = newMesure.epaule || undefined;
+        payload.longueurBras = newMesure.longueurBras || undefined;
+        payload.longueurJambe = newMesure.longueurJambe || undefined;
+        payload.cou = newMesure.cou || undefined;
+        payload.hanche = newMesure.hanche || undefined;
+        payload.poignet = newMesure.poignet || undefined;
+        payload.ventre = newMesure.ventre || undefined;
+      }
+      const created = await api.mesure.create(user.id, payload);
       setMesures((prev) => [...prev, created]);
       setSelectedMesureId(created.id);
       setShowMesureForm(false);
@@ -280,14 +297,13 @@ function BoutiquePage() {
                           className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                         >
                           {mesures.map((m) => (
-                            <option key={m.id} value={m.id}>{m.label}</option>
+                            <option key={m.id} value={m.id}>{m.label} {m.tailleStandard ? `(${m.tailleStandard})` : "(sur mesure)"}</option>
                           ))}
                         </select>
                       )}
 
                       {(showMesureForm || mesures.length === 0) && (
                         <div className="mt-3 rounded-xl border border-border bg-background p-4 space-y-3">
-                          <p className="text-xs text-muted-foreground">Entrez vos mesures en centimètres (sauf poids en kg).</p>
                           <input
                             required
                             placeholder="Nom de la mesure (ex: Tenue mariage)"
@@ -295,21 +311,55 @@ function BoutiquePage() {
                             onChange={(e) => setNewMesure({ ...newMesure, label: e.target.value })}
                             className="w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
                           />
-                          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-                            {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
-                              <div key={k}>
-                                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</label>
-                                <input
-                                  type="number"
-                                  step="0.1"
-                                  min={0}
-                                  value={newMesure[k] || ""}
-                                  onChange={(e) => setNewMesure({ ...newMesure, [k]: parseFloat(e.target.value) || 0 })}
-                                  className="mt-1 w-full rounded-md border border-input bg-card px-2 py-1.5 text-sm"
-                                />
-                              </div>
-                            ))}
+                          {/* Toggle mode */}
+                          <div className="flex gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setMesureMode("standard")}
+                              className={`flex-1 rounded-full border px-3 py-1.5 text-xs transition ${mesureMode === "standard" ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground"}`}
+                            >
+                              Taille standard
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setMesureMode("complete")}
+                              className={`flex-1 rounded-full border px-3 py-1.5 text-xs transition ${mesureMode === "complete" ? "border-accent bg-accent text-accent-foreground" : "border-border text-muted-foreground"}`}
+                            >
+                              Sur mesure
+                            </button>
                           </div>
+                          {mesureMode === "standard" ? (
+                            <div>
+                              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Taille</label>
+                              <select
+                                value={newMesure.tailleStandard}
+                                onChange={(e) => setNewMesure({ ...newMesure, tailleStandard: e.target.value as TailleStandard })}
+                                className="mt-1 w-full rounded-md border border-input bg-card px-3 py-2 text-sm"
+                              >
+                                <option value="">Choisir une taille…</option>
+                                {TAILLES_STANDARD.map((t) => <option key={t} value={t}>{t}</option>)}
+                              </select>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-xs text-muted-foreground">Entrez vos mesures en centimètres (sauf poids en kg).</p>
+                              <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+                                {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
+                                  <div key={k}>
+                                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">{k}</label>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      min={0}
+                                      value={(newMesure[k] as number) || ""}
+                                      onChange={(e) => setNewMesure({ ...newMesure, [k]: parseFloat(e.target.value) || 0 })}
+                                      className="mt-1 w-full rounded-md border border-input bg-card px-2 py-1.5 text-sm"
+                                    />
+                                  </div>
+                                ))}
+                              </div>
+                            </>
+                          )}
                           <button
                             type="button"
                             disabled={savingMesure || !newMesure.label}
