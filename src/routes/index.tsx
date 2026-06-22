@@ -9,7 +9,11 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "MODOLK — Héritage & Élégance" },
-      { name: "description", content: "MODOLK : une marque inspirée par l'Afrique, façonnée par l'élégance contemporaine." },
+      {
+        name: "description",
+        content:
+          "MODOLK : une marque inspirée par l'Afrique, façonnée par l'élégance contemporaine.",
+      },
     ],
   }),
 });
@@ -48,11 +52,21 @@ function Index() {
           <span className="text-lg font-semibold tracking-[0.25em]">MODOLK</span>
         </div>
         <nav className="hidden items-center gap-8 text-sm tracking-wide text-muted-foreground md:flex">
-          <Link to="/boutique" className="hover:text-foreground transition-colors">Boutique</Link>
-          <Link to="/boutique" className="hover:text-foreground transition-colors">Femme</Link>
-          <Link to="/boutique" className="hover:text-foreground transition-colors">Homme</Link>
-          <Link to="/boutique" className="hover:text-foreground transition-colors">Enfant</Link>
-          <a href="#histoire" className="hover:text-foreground transition-colors">Histoire</a>
+          <Link to="/boutique" className="hover:text-foreground transition-colors">
+            Boutique
+          </Link>
+          <Link to="/boutique" className="hover:text-foreground transition-colors">
+            Femme
+          </Link>
+          <Link to="/boutique" className="hover:text-foreground transition-colors">
+            Homme
+          </Link>
+          <Link to="/boutique" className="hover:text-foreground transition-colors">
+            Enfant
+          </Link>
+          <a href="#histoire" className="hover:text-foreground transition-colors">
+            Histoire
+          </a>
           <Link
             to="/compte"
             className="rounded-full border border-border px-4 py-2 text-foreground hover:bg-secondary transition-colors"
@@ -84,7 +98,8 @@ function Index() {
             <br /> chaque détail.
           </h1>
           <p className="mt-6 max-w-xl text-base text-muted-foreground md:text-lg">
-            MODOLK célèbre la richesse des racines africaines avec la précision d'un savoir-faire contemporain.
+            MODOLK célèbre la richesse des racines africaines avec la précision d'un savoir-faire
+            contemporain.
           </p>
           <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
             <Link
@@ -111,7 +126,8 @@ function Index() {
         <div className="mb-12 flex flex-col items-center text-center">
           <div className="text-xs tracking-[0.3em] text-accent">COLLECTIONS</div>
           <h2 className="mt-3 text-4xl font-light md:text-5xl">
-            Pour <span className="italic">elle</span>, pour <span className="italic">lui</span>, pour <span className="italic">eux</span>.
+            Pour <span className="italic">elle</span>, pour <span className="italic">lui</span>,
+            pour <span className="italic">eux</span>.
           </h2>
         </div>
         <div className="grid gap-6 md:grid-cols-3">
@@ -135,8 +151,13 @@ function Index() {
                   className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-[1.04]"
                 />
               </div>
-              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/80 via-ink/30 to-transparent p-6 text-background"
-                style={{ background: "linear-gradient(to top, color-mix(in oklab, var(--ink) 85%, transparent), transparent)" }}>
+              <div
+                className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-ink/80 via-ink/30 to-transparent p-6 text-background"
+                style={{
+                  background:
+                    "linear-gradient(to top, color-mix(in oklab, var(--ink) 85%, transparent), transparent)",
+                }}
+              >
                 <div className="text-[10px] tracking-[0.3em] text-primary">{c.n}</div>
                 <h3 className="mt-1 text-2xl font-light text-background">{c.t}</h3>
                 <p className="mt-1 text-sm text-background/80">{c.d}</p>
