@@ -153,8 +153,8 @@ function BoutiquePage() {
           <img src={logo} alt="MODOLK" className="h-9 w-9 object-contain" />
           <span className="tracking-[0.25em] text-sm">MODOLK</span>
         </Link>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to="/compte" className="text-muted-foreground hover:text-foreground">Mon compte</Link>
+        <div className="flex items-center gap-2 text-sm sm:gap-4">
+          <Link to="/compte" className="hidden text-muted-foreground hover:text-foreground sm:block">Mon compte</Link>
           <span className="rounded-full border border-border px-3 py-1.5 text-xs">
             Panier · {cart.count} · {formatPrice(cart.total)}
           </span>
@@ -181,7 +181,7 @@ function BoutiquePage() {
         </div>
 
         {/* Grille des designs */}
-        <div className="mt-10 grid gap-6 md:grid-cols-3">
+        <div className="mt-10 grid gap-6 sm:grid-cols-2 md:grid-cols-3">
           {loading ? (
             <p className="text-muted-foreground">Chargement…</p>
           ) : filtered.length === 0 ? (
@@ -247,7 +247,7 @@ function BoutiquePage() {
             <>
               <ul className="mt-6 divide-y divide-border">
                 {cart.items.map((i) => (
-                  <li key={i.designId} className="flex items-center justify-between gap-4 py-4">
+                  <li key={i.designId} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                     <div>
                       <div className="text-sm">{i.name}</div>
                       <div className="text-xs text-muted-foreground">{formatPrice(i.price)}</div>
@@ -260,7 +260,7 @@ function BoutiquePage() {
                         onChange={(e) => cart.setQty(i.designId, Number(e.target.value))}
                         className="w-16 rounded-md border border-input bg-background px-2 py-1 text-sm"
                       />
-                      <span className="w-28 text-right text-sm">{formatPrice(i.price * i.quantity)}</span>
+                      <span className="flex-1 text-right text-sm sm:w-28 sm:flex-none">{formatPrice(i.price * i.quantity)}</span>
                       <button onClick={() => cart.remove(i.designId)} className="text-xs text-muted-foreground hover:text-foreground">
                         Retirer
                       </button>

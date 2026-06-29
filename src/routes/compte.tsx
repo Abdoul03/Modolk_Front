@@ -132,10 +132,10 @@ function ComptePage() {
           <img src={logo} alt="MODOLK" className="h-9 w-9 object-contain" />
           <span className="tracking-[0.25em] text-sm">MODOLK</span>
         </Link>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to="/boutique" className="text-muted-foreground hover:text-foreground">Boutique</Link>
+        <div className="flex items-center gap-2 text-sm sm:gap-4">
+          <Link to="/boutique" className="hidden text-muted-foreground hover:text-foreground sm:block">Boutique</Link>
           {isAdmin && (
-            <Link to="/admin" className="rounded-full border border-border px-4 py-2 hover:bg-secondary">
+            <Link to="/admin" className="hidden rounded-full border border-border px-4 py-2 hover:bg-secondary sm:block">
               Espace admin
             </Link>
           )}
@@ -174,7 +174,7 @@ function ComptePage() {
         {tab === "profil" && (
           <form onSubmit={saveProfile} className="mt-8 space-y-5 rounded-2xl border border-border bg-card p-8">
             <h2 className="text-lg font-light">Mes informations</h2>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <label className="text-xs tracking-wide text-muted-foreground">Nom</label>
                 <input
@@ -354,7 +354,7 @@ function ComptePage() {
                         <span className="font-medium text-foreground">{m.tailleStandard}</span>
                       </div>
                     ) : (
-                      <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-muted-foreground md:grid-cols-5">
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-muted-foreground sm:grid-cols-3 md:grid-cols-5">
                         {(["poitrine", "epaule", "cou", "hanche", "ventre", "poignet", "longueurBras", "longueurJambe", "poids"] as const).map((k) => (
                           m[k] != null && (
                             <div key={k}>

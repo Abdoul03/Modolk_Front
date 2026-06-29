@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import logo from "@/assets/modolk-logo.png";
 import hommeImg from "@/assets/homme.jpg";
 import femmeImg from "@/assets/femme.jpg";
@@ -43,43 +44,111 @@ function PatternBand({ className = "" }: { className?: string }) {
 }
 
 function Index() {
+  const [menuOpen, setMenuOpen] = useState(false);
+
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Nav */}
-      <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-6">
-        <div className="flex items-center gap-3">
-          <img src={logo} alt="MODOLK" className="h-10 w-10 object-contain" />
-          <span className="text-lg font-semibold tracking-[0.25em]">MODOLK</span>
-        </div>
-        <nav className="hidden items-center gap-8 text-sm tracking-wide text-muted-foreground md:flex">
-          <Link to="/boutique" className="hover:text-foreground transition-colors">
-            Boutique
-          </Link>
-          <Link to="/boutique" className="hover:text-foreground transition-colors">
-            Femme
-          </Link>
-          <Link to="/boutique" className="hover:text-foreground transition-colors">
-            Homme
-          </Link>
-          <Link to="/boutique" className="hover:text-foreground transition-colors">
-            Enfant
-          </Link>
-          <a href="#histoire" className="hover:text-foreground transition-colors">
-            Histoire
-          </a>
-          <Link
-            to="/compte"
-            className="rounded-full border border-border px-4 py-2 text-foreground hover:bg-secondary transition-colors"
+      <header className="mx-auto max-w-6xl px-6 py-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <img src={logo} alt="MODOLK" className="h-10 w-10 object-contain" />
+            <span className="text-lg font-semibold tracking-[0.25em]">MODOLK</span>
+          </div>
+          {/* Desktop nav */}
+          <nav className="hidden items-center gap-8 text-sm tracking-wide text-muted-foreground md:flex">
+            <Link to="/boutique" className="hover:text-foreground transition-colors">
+              Boutique
+            </Link>
+            <Link to="/boutique" className="hover:text-foreground transition-colors">
+              Femme
+            </Link>
+            <Link to="/boutique" className="hover:text-foreground transition-colors">
+              Homme
+            </Link>
+            <Link to="/boutique" className="hover:text-foreground transition-colors">
+              Enfant
+            </Link>
+            <a href="#histoire" className="hover:text-foreground transition-colors">
+              Histoire
+            </a>
+            <Link
+              to="/compte"
+              className="rounded-full border border-border px-4 py-2 text-foreground hover:bg-secondary transition-colors"
+            >
+              Mon compte
+            </Link>
+          </nav>
+          {/* Hamburger */}
+          <button
+            onClick={() => setMenuOpen(!menuOpen)}
+            aria-label="Menu"
+            className="flex flex-col gap-1.5 p-1 md:hidden"
           >
-            Mon compte
-          </Link>
-        </nav>
+            <span
+              className={`block h-0.5 w-6 bg-foreground transition-all duration-200 ${menuOpen ? "translate-y-2 rotate-45" : ""}`}
+            />
+            <span
+              className={`block h-0.5 w-6 bg-foreground transition-all duration-200 ${menuOpen ? "opacity-0" : ""}`}
+            />
+            <span
+              className={`block h-0.5 w-6 bg-foreground transition-all duration-200 ${menuOpen ? "-translate-y-2 -rotate-45" : ""}`}
+            />
+          </button>
+        </div>
+        {/* Mobile menu */}
+        {menuOpen && (
+          <nav className="mt-4 flex flex-col gap-4 border-t border-border pt-4 text-sm tracking-wide text-muted-foreground md:hidden">
+            <Link
+              to="/boutique"
+              onClick={() => setMenuOpen(false)}
+              className="hover:text-foreground transition-colors"
+            >
+              Boutique
+            </Link>
+            <Link
+              to="/boutique"
+              onClick={() => setMenuOpen(false)}
+              className="hover:text-foreground transition-colors"
+            >
+              Femme
+            </Link>
+            <Link
+              to="/boutique"
+              onClick={() => setMenuOpen(false)}
+              className="hover:text-foreground transition-colors"
+            >
+              Homme
+            </Link>
+            <Link
+              to="/boutique"
+              onClick={() => setMenuOpen(false)}
+              className="hover:text-foreground transition-colors"
+            >
+              Enfant
+            </Link>
+            <a
+              href="#histoire"
+              onClick={() => setMenuOpen(false)}
+              className="hover:text-foreground transition-colors"
+            >
+              Histoire
+            </a>
+            <Link
+              to="/compte"
+              onClick={() => setMenuOpen(false)}
+              className="w-fit rounded-full border border-border px-4 py-2 text-foreground hover:bg-secondary transition-colors"
+            >
+              Mon compte
+            </Link>
+          </nav>
+        )}
       </header>
 
       <PatternBand className="h-6 w-full text-primary/40" />
 
       {/* Hero */}
-      <section className="relative mx-auto max-w-6xl px-6 pt-20 pb-28">
+      <section className="relative mx-auto max-w-6xl px-6 pt-12 pb-16 md:pt-20 md:pb-28">
         <div
           className="absolute inset-0 -z-10 opacity-60"
           style={{
@@ -93,7 +162,7 @@ function Index() {
             alt="MODOLK"
             className="h-40 w-40 object-contain drop-shadow-[0_10px_40px_color-mix(in_oklab,var(--gold)_45%,transparent)]"
           />
-          <h1 className="mt-10 max-w-3xl text-5xl font-light leading-[1.05] tracking-tight md:text-7xl">
+          <h1 className="mt-10 max-w-3xl text-4xl font-light leading-[1.05] tracking-tight md:text-7xl">
             L'héritage <span className="italic text-accent">tissé</span> dans
             <br /> chaque détail.
           </h1>
@@ -130,7 +199,7 @@ function Index() {
             pour <span className="italic">eux</span>.
           </h2>
         </div>
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 sm:grid-cols-2 md:grid-cols-3">
           {[
             { t: "Femme", d: "Silhouettes fluides, étoffes nobles.", img: femmeImg, n: "01" },
             { t: "Homme", d: "Coupes nettes, allure assurée.", img: hommeImg, n: "02" },
@@ -171,7 +240,7 @@ function Index() {
         </div>
 
         {/* Pillars */}
-        <div className="mt-24 grid gap-10 md:grid-cols-3">
+        <div className="mt-16 grid gap-6 sm:grid-cols-2 md:mt-24 md:grid-cols-3 md:gap-10">
           {[
             { t: "Origine", d: "Inspirée par la terre, le soleil et les motifs du continent." },
             { t: "Artisanat", d: "Une exécution méticuleuse, geste après geste." },
@@ -195,7 +264,7 @@ function Index() {
         className="relative overflow-hidden border-y border-border bg-secondary/40"
       >
         <PatternBand className="absolute inset-x-0 top-0 h-6 text-accent/30" />
-        <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-28 md:grid-cols-2">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-6 py-16 md:grid-cols-2 md:py-28">
           <div>
             <div className="text-xs tracking-[0.3em] text-accent">L'ESSENCE</div>
             <h2 className="mt-4 text-4xl font-light leading-tight md:text-5xl">

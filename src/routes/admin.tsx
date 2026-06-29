@@ -67,9 +67,9 @@ function AdminPage() {
           <img src={logo} alt="MODOLK" className="h-9 w-9 object-contain" />
           <span className="tracking-[0.25em] text-sm">MODOLK · ADMIN</span>
         </Link>
-        <div className="flex items-center gap-4 text-sm">
-          <Link to="/boutique" className="text-muted-foreground hover:text-foreground">Boutique</Link>
-          <Link to="/compte" className="text-muted-foreground hover:text-foreground">Mon compte</Link>
+        <div className="flex items-center gap-2 text-sm sm:gap-4">
+          <Link to="/boutique" className="hidden text-muted-foreground hover:text-foreground sm:block">Boutique</Link>
+          <Link to="/compte" className="hidden text-muted-foreground hover:text-foreground sm:block">Mon compte</Link>
           <button onClick={() => { signOut(); navigate({ to: "/" }); }} className="text-muted-foreground hover:text-foreground">
             Déconnexion
           </button>
@@ -80,7 +80,7 @@ function AdminPage() {
         <div className="text-xs tracking-[0.3em] text-accent">TABLEAU DE BORD</div>
         <h1 className="mt-3 text-4xl font-light">Espace administrateur</h1>
 
-        <div className="mt-8 grid gap-4 md:grid-cols-4">
+        <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
           <Stat label="Clients" value={clients.length} />
           <Stat label="Modèles" value={designs.length} />
           <Stat label="Commandes" value={commandes.length} />
